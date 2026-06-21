@@ -37,7 +37,11 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'ubuntu-22.04' && 'aarch64-linux-android' || 'x86_64-pc-windows-msvc' }}
 
-      # 💡 特别注意：Android 交叉编译需要将相关的工具链和环境变量关联起来
+      # 💡 强行移除工作区配置文件，彻底根治 pnpm 的神经质报错
+      - name: Remove Workspace Config to Fix pnpm Bug
+        shell: bash
+        run: rm -f pnpm-workspace.yaml
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -64,19 +68,16 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "App Release ${{ github.ref_name }}"
-          # 💡 [重要修正]：Windows 端给官方 action 注入独立安装参数
           args: '--target x86_64-pc-windows-msvc'
 
-      # ---- 🚀 编译分流 2：Android 改用纯原生命令（完美兼容 workspace） ----
+      # ---- 🚀 编译分流 2：Android 改用纯原生命令 ----
       - name: Install Node Dependencies (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
-        # 💡 [重要修正]：加上 --filter . 强行让 pnpm 知道你只想安根目录，无视多包错误
-        run: pnpm install --filter .
+        run: pnpm install
 
       - name: Build Android APK (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
-        # 💡 [重要修正]：同样加上 --filter . 确保编译在根目录下执行
-        run: pnpm --filter . tauri android build --target aarch64
+        run: pnpm tauri android build --target aarch64
 
       # ---- 🚀 编译分流 3：Android 编译完后，把生成的 APK 文件捞出来塞进 GitHub Release 里 ----
       - name: Upload Android APK to Release
