@@ -18,9 +18,9 @@ jobs:
           - platform: 'windows-latest'
             args: '--target x86_64-pc-windows-msvc'
 
-          # 2. Android 打包配置
+          # 2. Android 打包配置（💡 这里直接注入 android build 指令，规避 plugin 警告）
           - platform: 'ubuntu-22.04'
-            args: '--target aarch64'
+            args: 'android build --target aarch64'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -61,9 +61,8 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: android-actions/setup-android@v3
 
-      # ---- 安装前端依赖 ----
-      - name: Install frontend dependencies
-        run: pnpm install
+      # 💡 注意：这里已经彻底删除了原本会报错的 "Install frontend dependencies" (pnpm install) 步骤
+      # 统一交由下方的 tauri-action 官方引擎在底层自动调度，防止路径找不到的翻车情况。
 
       # ---- 核心：一键调用 Tauri 官方打包 Action ----
       - name: Build the app
@@ -73,6 +72,5 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "App Release ${{ github.ref_name }}"
-          # 💡 修改这里：去掉未定义的 plugin 参数，改用更加标准兼容的打包逻辑
-          # 我们在 Windows 虚拟机和 Ubuntu 虚拟机上分别传递它们专属的参数
-          args: ${{ matrix.platform == 'ubuntu-22.04' && '--target aarch64' || '--target x86_64-pc-windows-msvc' }}
+          # 💡 直接传入矩阵变量，Windows 端执行 tauri build ...，Android 端执行 tauri android build ...
+          args: ${{ matrix.args }}
