@@ -1,0 +1,78 @@
+name: "Publish Release"
+
+# 触发条件：当你推送以 v 开头标签（如 v1.0.0）时自动运行
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 1. Windows 打包配置
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+
+          # 2. Android 打包配置
+          - platform: 'ubuntu-22.04'
+            args: '--target aarch64'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- 基础环境配置 (Windows & Ubuntu 通用) ----
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Windows 需要 msvc 目标，Android 需要 aarch64 目标
+          targets: ${{ matrix.platform == 'ubuntu-22.04' && 'aarch64-linux-android' || 'x86_64-pc-windows-msvc' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # ---- 针对 Android 平台的特殊硬核组件注入 ----
+      - name: Setup Java and Android SDK (Android Only)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK (Android Only)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: android-actions/setup-android@v3
+
+      # ---- 安装前端依赖 ----
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      # ---- 核心：一键调用 Tauri 官方打包 Action ----
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "App Release ${{ github.ref_name }}"
+          # 💡 修改这里：去掉未定义的 plugin 参数，改用更加标准兼容的打包逻辑
+          # 我们在 Windows 虚拟机和 Ubuntu 虚拟机上分别传递它们专属的参数
+          args: ${{ matrix.platform == 'ubuntu-22.04' && '--target aarch64' || '--target x86_64-pc-windows-msvc' }}

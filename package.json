@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "phone": "tauri android dev --no-dev-manager 192.168.31.147:41477",
+    "build:pixel": "tauri android build --no-dev-manager --debug --target aarch64"
   },
   "license": "MIT",
   "dependencies": {
