@@ -63,23 +63,35 @@ jobs:
       - name: Install Node Dependencies
         run: pnpm install
 
-      # ---- 🚀 编译分流 1：如果是 Windows 虚拟机，打 Windows 的 .exe/msi 包 ----
+      # ==================== WINDOWS 端专属编译与独立上传 ====================
       - name: Build Windows App (Windows Only)
         if: matrix.platform == 'windows-latest'
         run: pnpm tauri build --target x86_64-pc-windows-msvc
 
-      # ---- 🚀 编译分流 2：如果是 Linux 虚拟机，打 Android APK ----
+      - name: Upload Windows Artifacts to Release
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true # 💡 关键：允许追加，不覆盖另一个平台的产物
+          files: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ==================== ANDROID 端专属编译与独立上传 ====================
       - name: Build Android APK (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
         run: pnpm tauri android build --target aarch64
 
-      # ---- 🚀 自动收集两端的编译产物，并统一上传到 GitHub Release 页面 ----
-      - name: Upload Artifacts to Release
+      - name: Upload Android APK to Release
+        if: matrix.platform == 'ubuntu-22.04'
         uses: softprops/action-gh-release@v2
         with:
+          append_body: true # 💡 关键：允许追加，不覆盖另一个平台的产物
+          # 💡 精准匹配 Tauri v2 带有 universal 路径的 APK 和 AAB 产物
           files: |
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
