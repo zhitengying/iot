@@ -37,7 +37,7 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'ubuntu-22.04' && 'aarch64-linux-android' || 'x86_64-pc-windows-msvc' }}
 
-      # 💡 强行移除工作区配置文件，彻底根治 pnpm 的神经质报错
+      # 💡 强行移除工作区配置文件。这里采用兼容跨平台的 shell 语法，确保两端都能安全删掉它
       - name: Remove Workspace Config to Fix pnpm Bug
         shell: bash
         run: rm -f pnpm-workspace.yaml
@@ -59,31 +59,27 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: android-actions/setup-android@v3
 
-      # ---- 🚀 编译分流 1：Windows 虚拟机 ----
-      - name: Build Windows App
-        if: matrix.platform == 'windows-latest'
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "App Release ${{ github.ref_name }}"
-          args: '--target x86_64-pc-windows-msvc'
-
-      # ---- 🚀 编译分流 2：Android 改用纯原生命令 ----
-      - name: Install Node Dependencies (Android Only)
-        if: matrix.platform == 'ubuntu-22.04'
+      # ---- 📦 核心通用步骤：两端在各自的虚拟机里都要老老实实执行本地安装 ----
+      - name: Install Node Dependencies
         run: pnpm install
 
+      # ---- 🚀 编译分流 1：如果是 Windows 虚拟机，打 Windows 的 .exe/msi 包 ----
+      - name: Build Windows App (Windows Only)
+        if: matrix.platform == 'windows-latest'
+        run: pnpm tauri build --target x86_64-pc-windows-msvc
+
+      # ---- 🚀 编译分流 2：如果是 Linux 虚拟机，打 Android APK ----
       - name: Build Android APK (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
         run: pnpm tauri android build --target aarch64
 
-      # ---- 🚀 编译分流 3：Android 编译完后，把生成的 APK 文件捞出来塞进 GitHub Release 里 ----
-      - name: Upload Android APK to Release
-        if: matrix.platform == 'ubuntu-22.04'
+      # ---- 🚀 自动收集两端的编译产物，并统一上传到 GitHub Release 页面 ----
+      - name: Upload Artifacts to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+          files: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/gen/android/app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
