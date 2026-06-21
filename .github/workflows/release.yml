@@ -66,6 +66,15 @@ jobs:
           releaseName: "App Release ${{ github.ref_name }}"
           args: '--target x86_64-pc-windows-msvc'
 
+      # ---- 🔍 抓鬼临时步骤：在安装前强行打印云端目录结构 ----
+      - name: Debug Cloud Directory Listing
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          echo "=== 当前绝对路径 ==="
+          pwd
+          echo "=== 当前目录下有哪些文件 ==="
+          ls -la
+
       # ---- 🚀 编译分流 2：Android 改用纯原生命令，不给官方 Action 任何瞎拼参数的机会 ----
       - name: Install Node Dependencies (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
