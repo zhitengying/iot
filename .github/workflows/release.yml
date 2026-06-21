@@ -1,6 +1,5 @@
 name: "Publish Release"
 
-# 触发条件：当你推送以 v 开头标签（如 v1.0.0）时自动运行
 on:
   push:
     tags:
@@ -14,13 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 1. Windows 打包配置
           - platform: 'windows-latest'
-            args: '--target x86_64-pc-windows-msvc'
-
-          # 2. Android 打包配置（💡 这里直接注入 android build 指令，规避 plugin 警告）
           - platform: 'ubuntu-22.04'
-            args: 'android build --target aarch64'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -41,7 +35,6 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Windows 需要 msvc 目标，Android 需要 aarch64 目标
           targets: ${{ matrix.platform == 'ubuntu-22.04' && 'aarch64-linux-android' || 'x86_64-pc-windows-msvc' }}
 
       - name: Rust cache
@@ -49,7 +42,7 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      # ---- 针对 Android 平台的特殊硬核组件注入 ----
+      # ---- 针对 Android 平台的特殊组件注入 ----
       - name: Setup Java and Android SDK (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
         uses: actions/setup-java@v4
@@ -61,16 +54,26 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: android-actions/setup-android@v3
 
-      # 💡 注意：这里已经彻底删除了原本会报错的 "Install frontend dependencies" (pnpm install) 步骤
-      # 统一交由下方的 tauri-action 官方引擎在底层自动调度，防止路径找不到的翻车情况。
-
-      # ---- 核心：一键调用 Tauri 官方打包 Action ----
-      - name: Build the app
+      # ---- 🚀 编译分流 1：如果是 Windows 虚拟机，只打 Windows 包 ----
+      - name: Build Windows App
+        if: matrix.platform == 'windows-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "App Release ${{ github.ref_name }}"
-          # 💡 直接传入矩阵变量，Windows 端执行 tauri build ...，Android 端执行 tauri android build ...
-          args: ${{ matrix.args }}
+          args: '--target x86_64-pc-windows-msvc'
+
+      # ---- 🚀 编译分流 2：如果是 Linux 虚拟机，只打 Android APK ----
+      - name: Build Android App
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "App Release ${{ github.ref_name }}"
+          # 💡 用专门的 tauriScript 参数来执行移动端编译，完美避开参数解析的大坑
+          tauriScript: pnpm tauri android build
+          args: '--target aarch64'
