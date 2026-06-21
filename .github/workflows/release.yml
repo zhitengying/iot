@@ -37,6 +37,7 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'ubuntu-22.04' && 'aarch64-linux-android' || 'x86_64-pc-windows-msvc' }}
 
+      # 💡 特别注意：Android 交叉编译需要将相关的工具链和环境变量关联起来
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -54,7 +55,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: android-actions/setup-android@v3
 
-      # ---- 🚀 编译分流 1：如果是 Windows 虚拟机，只打 Windows 包 ----
+      # ---- 🚀 编译分流 1：Windows 保持原样，利用官方 Action 自动创建 Release 并上传 ----
       - name: Build Windows App
         if: matrix.platform == 'windows-latest'
         uses: tauri-apps/tauri-action@v0
@@ -65,15 +66,20 @@ jobs:
           releaseName: "App Release ${{ github.ref_name }}"
           args: '--target x86_64-pc-windows-msvc'
 
-      # ---- 🚀 编译分流 2：如果是 Linux 虚拟机，只打 Android APK ----
-      - name: Build Android App
+      # ---- 🚀 编译分流 2：Android 改用纯原生命令，不给官方 Action 任何瞎拼参数的机会 ----
+      - name: Install Node Dependencies (Android Only)
         if: matrix.platform == 'ubuntu-22.04'
-        uses: tauri-apps/tauri-action@v0
+        run: pnpm install
+
+      - name: Build Android APK (Android Only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: pnpm tauri android build --target aarch64
+
+      # ---- 🚀 编译分流 3：Android 编译完后，把生成的 APK 文件捞出来塞进 GitHub Release 里 ----
+      - name: Upload Android APK to Release
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "App Release ${{ github.ref_name }}"
-          # 💡 用专门的 tauriScript 参数来执行移动端编译，完美避开参数解析的大坑
-          tauriScript: pnpm tauri android build
-          args: '--target aarch64'
